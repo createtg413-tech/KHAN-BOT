@@ -1,0 +1,322 @@
+import os
+import requests
+import random
+import time
+import json
+from telebot import types
+import telebot
+from flask import Flask
+from threading import Thread
+
+# ==========================================
+#  ১. আপনার লাইভ কনফিগারেশন ডাটা
+# ==========================================
+BOT_TOKEN = "8654959462:AAHr_XqPHdniQCxCazjtWFzOj9yUI4bCx6M"
+GRIZZLY_API_KEY = "bea0584f29b670bf7647951bf8b9db9a"
+ADMIN_ID = 8524193966
+
+CHANNEL_ID = "@HiddenSource2"  
+GROUP_ID = "@urkhanvai2"      
+
+bot = telebot.TeleBot(BOT_TOKEN)
+
+# ফাইল-ভিত্তিক পার্মানেন্ট ডাটাবেস (রিস্টার্ট নিলেও ডেটা হারাবে না)
+DB_FILE = "database.json"
+GLOBAL_ORDERS = {}
+
+def load_db():
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, "r") as f: return json.load(f)
+    return {}
+
+def save_db(db):
+    with open(DB_FILE, "w") as f: json.dump(db, f, indent=4)
+
+# ==========================================
+#  ২. ২৪ ঘণ্টা লাইভ রাখার ওয়েব পিন (Flask)
+# ==========================================
+app = Flask('')
+@app.route('/')
+def home(): return "🔥 Khan Premium Telegram Sniper Engine is Live! 🔥"
+def run_server(): app.run(host='0.0.0.0', port=8080)
+def keep_alive(): Thread(target=run_server).start()
+
+# ==========================================
+#  ৩. মেম্বারশিপ চেক (স্মার্ট জয়েনিং লজিক)
+# ==========================================
+def is_joined_all(user_id):
+    if user_id == ADMIN_ID: return True
+    try:
+        ch_member = bot.get_chat_member(CHANNEL_ID, user_id)
+        gr_member = bot.get_chat_member(GROUP_ID, user_id)
+        allowed = ['member', 'administrator', 'creator']
+        if ch_member.status in allowed and gr_member.status in allowed:
+            return True
+        return False
+    except Exception: return False
+
+# ==========================================
+#  ৪. মেইন ড্যাশবোর্ড ইন্টারফেস (Premium Look)
+# ==========================================
+def send_dashboard(chat_id, user_id):
+    db = load_db()
+    balance = db[str(user_id)]['balance']
+    lang = db[str(user_id)]['lang']
+    
+    text = {
+        'bn': f"• **খান ওটিপি স্নাইপার (টেলিগ্রাম স্পেশাল)** •\n\n👤 **আপনার আইডি:** `{user_id}`\n💰 **মোট ব্যালেন্স:** {balance:.4f} USDT\n🏆 **রিলিজ র‍্যাঙ্ক:** VIP0",
+        'en': f"• **Khan Telegram OTP Sniper** •\n\n👤 **Your ID:** `{user_id}`\n💰 **Total Balance:** {balance:.4f} USDT\n🏆 **Rank:** VIP0"
+    }.get(lang, "• **Khan Telegram OTP Sniper** •")
+    
+    markup = types.InlineKeyboardMarkup()
+    markup.row(types.InlineKeyboardButton("💳 Deposit", callback_data="dep_menu"), types.InlineKeyboardButton("🎡 Lucky Spin", callback_data="spin_wheel"))
+    markup.row(types.InlineKeyboardButton("👥 Referral (2%)", callback_data="ref_menu"), types.InlineKeyboardButton("💬 Live Support", callback_data="support_chat"))
+    
+    # এডমিন হলে স্পেশাল প্যানেল বাটন শো করবে
+    if user_id == ADMIN_ID:
+        markup.row(types.InlineKeyboardButton("👑 Khan Admin Panel", callback_data="admin_panel"))
+        
+    bot.send_message(chat_id, text, reply_markup=markup, parse_mode="Markdown")
+
+# ==========================================
+#  ৫. কমান্ড হ্যান্ডলিং (/start)
+# ==========================================
+@bot.message_handler(commands=['start'])
+def handle_start(message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    text_args = message.text.split()
+    
+    db = load_db()
+    s_user_id = str(user_id)
+    
+    if s_user_id not in db:
+        db[s_user_id] = {'lang': None, 'balance': 0.05, 'referred_by': None, 'last_spin': 0, 'verified': False}
+        if len(text_args) > 1 and text_args[1].isdigit():
+            referrer = text_args[1]
+            if referrer != s_user_id and referrer in db:
+                db[s_user_id]['referred_by'] = referrer
+        save_db(db)
+
+    # ইউজার গ্রুপে আছে কিনা এবং আগে ভেরিফাই করেছে কিনা চেক
+    if not is_joined_all(user_id) or not db[s_user_id].get('verified', False):
+        markup = types.InlineKeyboardMarkup()
+        markup.row(types.InlineKeyboardButton("📢 Join Main Channel", url="https://t.me/HiddenSource2"))
+        markup.row(types.InlineKeyboardButton("💬 Join Support Group", url="https://t.me/urkhanvai2"))
+        markup.row(types.InlineKeyboardButton("🔗 External Web Verify (🔒)", url="https://your-verification-link.com"))
+        markup.row(types.InlineKeyboardButton("🔄 Verify Me", callback_data="check_all_join"))
+        bot.send_message(chat_id, "⚠️ **Access Denied!**\nবট ব্যবহার করতে টাস্কগুলো সম্পন্ন করে নিচের বাটনে চাপ দিন:", reply_markup=markup)
+        return
+
+    if db[s_user_id]['lang'] is None:
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🇺🇸 English", callback_data="slang_en"), types.InlineKeyboardButton("🇧🇩 বাংলা", callback_data="slang_bn"))
+        bot.send_message(chat_id, "✨ **Welcome to Khan VIP Sniper** ✨\n\nSelect Language / ভাষা নির্বাচন করুন:", reply_markup=markup)
+    else:
+        send_dashboard(chat_id, user_id)
+
+# ==========================================
+#  ৬. এডমিন স্পেশাল কন্ট্রোল কমান্ডস
+# ==========================================
+@bot.message_handler(commands=['admin'])
+def admin_cmd(message):
+    if message.from_user.id != ADMIN_ID: return
+    db = load_db()
+    total_users = len(db)
+    text = f"👑 **খান ভাই স্পেশাল এডমিন প্যানেল** 👑\n\n👥 মোট রেজিস্টার্ড ইউজার: {total_users}\n⚡ সক্রিয় ওটিপি সেশন: {len(GLOBAL_ORDERS)}\n\n⚙️ **কমান্ড গাইড:**\n👉 ইউজার ব্যালেন্স দিতে লিখুন:\n`/addbalance ইউজার_আইডি পরিমাণ`"
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(commands=['addbalance'])
+def add_balance_cmd(message):
+    if message.from_user.id != ADMIN_ID: return
+    try:
+        _, target_id, amount = message.text.split()
+        db = load_db()
+        if target_id in db:
+            db[target_id]['balance'] += float(amount)
+            save_db(db)
+            bot.send_message(message.chat.id, f"✅ ইউজার `{target_id}` এর একাউন্টে ${amount} যোগ করা হয়েছে।", parse_mode="Markdown")
+            bot.send_message(int(target_id), f"💰 **এডমিন আপনার একাউন্টে ${amount} ক্রেডিট যোগ করেছেন!**")
+        else:
+            bot.send_message(message.chat.id, "❌ এই আইডির কোনো ইউজার বটে নাই!")
+    except Exception:
+        bot.send_message(message.chat.id, "❌ ফরম্যাট ভুল! ঠিকভাবে লিখুন। উদাহরণ: `/addbalance 123456 5.0`")
+
+# ==========================================
+#  ৭. বাটন ও অ্যাকশন কন্ট্রোলার (Callbacks)
+# ==========================================
+@bot.callback_query_handler(func=lambda call: True)
+def handle_all_callbacks(call):
+    user_id = call.from_user.id
+    chat_id = call.message.chat.id
+    s_user_id = str(user_id)
+    db = load_db()
+    
+    if call.data == "check_all_join":
+        if is_joined_all(user_id):
+            db[s_user_id]['verified'] = True
+            save_db(db)
+            bot.answer_callback_query(call.id, "✅ ভেরিফিকেশন সফল!")
+            bot.delete_message(chat_id, call.message.message_id)
+            handle_start(call.message)
+        else:
+            bot.answer_callback_query(call.id, "❌ আপনি এখনো সবগুলো টাস্ক সম্পন্ন করেননি!", show_alert=True)
+        return
+
+    if call.data.startswith("slang_"):
+        db[s_user_id]['lang'] = call.data.split("_")[1]
+        save_db(db)
+        bot.delete_message(chat_id, call.message.message_id)
+        send_dashboard(chat_id, user_id)
+
+    elif call.data == "admin_panel":
+        if user_id == ADMIN_ID: admin_cmd(call.message)
+
+    # --- লাকি স্পিন ---
+    elif call.data == "spin_wheel":
+        current_time = time.time()
+        if current_time - db[s_user_id]['last_spin'] < 86400:
+            bot.answer_callback_query(call.id, "❌ আজকে অলরেডি স্পিন করেছেন! ২৪ ঘণ্টা পর আবার ট্রাই করুন।", show_alert=True)
+            return
+        win_amount = round(random.uniform(0.002, 0.05), 4)
+        db[s_user_id]['balance'] += win_amount
+        db[s_user_id]['last_spin'] = current_time
+        save_db(db)
+        bot.answer_callback_query(call.id, f"🎉 মোবারকবাদ! আপনি ${win_amount} ফ্রি বোনাস জিতেছেন!", show_alert=True)
+        bot.delete_message(chat_id, call.message.message_id)
+        send_dashboard(chat_id, user_id)
+
+    # --- রেফারেল ---
+    elif call.data == "ref_menu":
+        ref_link = f"https://t.me/{bot.get_me().username}?start={user_id}"
+        bot.edit_message_text(f"👥 **রেফারেল প্রোগ্রাম (২%)**\n\n🔗 **আপনার রেফার লিংক:**\n`{ref_link}`", chat_id, call.message.message_id, parse_mode="Markdown")
+
+    # --- ক্লিক-টু-কপি ডিপোজিট ---
+    elif call.data == "dep_menu":
+        markup = types.InlineKeyboardMarkup()
+        markup.row(types.InlineKeyboardButton("বিকাশ (bKash)", callback_data="p_bkash"), types.InlineKeyboardButton("নগদ (Nagad)", callback_data="p_nagad"))
+        markup.row(types.InlineKeyboardButton("Binance Pay", callback_data="p_binance"), types.InlineKeyboardButton("USDT TRC20", callback_data="p_usdt"))
+        bot.edit_message_text("💳 নম্বরের ওপর চাপ দিলেই অটো-কপি হয়ে যাবে:", chat_id, call.message.message_id, reply_markup=markup)
+
+    elif call.data.startswith("p_"):
+        method = call.data.split("_")[1]
+        details = {'bkash': '`01948805285` (Personal)', 'nagad': '`01948805285` (Personal)', 'usdt': '`TKpCgqq4iEZmbZnF9B4iz6GLNnN9n8eVoV` (TRC20)', 'binance': '`849519589` (Binance User ID)'}[method]
+        bot.edit_message_text(f"📥 ক্যাশইন/ডিপোজিট করুন:\n\n💰 **ঠিকানা:** {details}\n\nটাকা পাঠিয়ে স্ক্রিনশট ও TxID বটের `Live Support`-এ পাঠান।", chat_id, call.message.message_id, parse_mode="Markdown")
+
+    elif call.data == "support_chat":
+        msg = bot.send_message(chat_id, "💬 আপনার মেসেজ বা স্ক্রিনশটটি এখানে পাঠান, সরাসরি এডমিনের কাছে চলে যাবে:")
+        bot.register_next_step_handler(msg, process_support_msg)
+
+    # --- গ্রুপ স্নাইপিং ও ক্লেম লজিক ---
+    elif call.data.startswith("claim_"):
+        _, order_id, country_id, price_str = call.data.split("_")
+        price = float(price_str)
+        
+        if db[s_user_id]['balance'] < price:
+            bot.answer_callback_query(call.id, "❌ এই নম্বরটি নেওয়ার মতো পর্যাপ্ত ব্যালেন্স নেই!", show_alert=True)
+            return
+        
+        if order_id in GLOBAL_ORDERS:
+            bot.answer_callback_query(call.id, "❌ দুঃখিত ভাই! এটি অলরেডি অন্য একজন স্নাইপ করে নিয়েছেন।", show_alert=True)
+            return
+            
+        # গ্রিজলী থেকে শুধুমাত্র টেলিগ্রাম (tg) সার্ভিস কল করা হবে
+        API_URL = f"https://api.grizzlysms.com/stubs/handler_api.php?api_key={GRIZZLY_API_KEY}&action=getNumber&service=tg&country={country_id}"
+        
+        try:
+            res = requests.get(API_URL).text
+            if res.startswith("ACCESS_NUMBER"):
+                _, api_order_id, phone_number = res.split(":")
+                GLOBAL_ORDERS[order_id] = {'user': user_id, 'api_id': api_order_id, 'price': price}
+                
+                bot.edit_message_text(f"🔒 **Telegram Number Snipped!**\n👤 Snipped by: `{user_id}`\n🚫 Stock Closed.", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+                
+                markup = types.InlineKeyboardMarkup()
+                markup.row(types.InlineKeyboardButton("🔄 Fetch OTP Code", callback_data=f"fotp_{order_id}"))
+                markup.row(types.InlineKeyboardButton("❌ Cancel & Refund", callback_data=f"cncl_{order_id}"))
+                bot.send_message(user_id, f"🎯 **স্নাইপ সফল!**\n\n📱 নম্বর: `{phone_number}`\n💵 মূল্য: ${price:.2f} USDT\n\n⚠️ ওটিপি পাঠিয়ে নিচের বাটনে চাপুন:", reply_markup=markup, parse_mode="Markdown")
+            else:
+                bot.answer_callback_query(call.id, "❌ এপিআই স্টক খালি!", show_alert=True)
+        except Exception:
+            bot.answer_callback_query(call.id, "❌ কানেকশন এরর!", show_alert=True)
+
+    # ওটিপি ক্যাচ এবং ব্যালেন্স ডিডাকশন
+    elif call.data.startswith("fotp_"):
+        order_id = call.data.split("_")[1]
+        ord_info = GLOBAL_ORDERS.get(order_id)
+        
+        if not ord_info: return
+        STATUS_URL = f"https://api.grizzlysms.com/stubs/handler_api.php?api_key={GRIZZLY_API_KEY}&action=getStatus&id={ord_info['api_id']}"
+        
+        try:
+            res = requests.get(STATUS_URL).text
+            if res.startswith("STATUS_OK"):
+                code = res.split(":")[1]
+                price = ord_info['price']
+                
+                db[s_user_id]['balance'] -= price
+                
+                # রেফারেল কমিশন বিতরণ
+                referrer = db[s_user_id]['referred_by']
+                if referrer and referrer in db:
+                    db[referrer]['balance'] += (price * 0.02)
+                save_db(db)
+                    
+                bot.send_message(chat_id, f"✅ **ওটিপি কোড:** `{code}`\n💸 একাউন্ট থেকে ${price} কাটা হয়েছে।", parse_mode="Markdown")
+                bot.delete_message(chat_id, call.message.message_id)
+                del GLOBAL_ORDERS[order_id]
+            elif res == "STATUS_WAIT_CODE":
+                bot.answer_callback_query(call.id, "⏳ ওটিপি আসেনি! একটু পর আবার চাপুন।", show_alert=True)
+        except Exception: pass
+
+    elif call.data.startswith("cncl_"):
+        order_id = call.data.split("_")[1]
+        ord_info = GLOBAL_ORDERS.get(order_id)
+        if ord_info:
+            requests.get(f"https://api.grizzlysms.com/stubs/handler_api.php?api_key={GRIZZLY_API_KEY}&action=setStatus&status=8&id={ord_info['api_id']}")
+            bot.answer_callback_query(call.id, "❌ অর্ডার বাতিল! রিফান্ড করা হয়েছে।")
+            bot.delete_message(chat_id, call.message.message_id)
+            if order_id in GLOBAL_ORDERS: del GLOBAL_ORDERS[order_id]
+
+def process_support_msg(message):
+    bot.send_message(ADMIN_ID, f"🔔 **সাপোর্ট মেসেজ!**\n👤 আইডি: `{message.from_user.id}`\n💬 মেসেজ: {message.text}")
+    bot.send_message(message.chat.id, "✅ আপনার বার্তা এডমিনের কাছে পাঠানো হয়েছে।")
+
+# ==========================================
+#  ৮. 🔁 অটোমেটিক স্টক চেকার (Auto-Fetch Stream)
+# ==========================================
+def auto_grizzly_fetcher():
+    """গ্রিজলী এপিআই-তে নতুন কোনো সস্তা টেলিগ্রাম নাম্বার আসলেই এটি অটো গ্রুপে ড্রপ করবে"""
+    # আমরা টেস্ট বা লাইভ ড্রপের জন্য গিনি-বিসাউ (133) সিলেক্ট করে রাখলাম, প্রাইস ০.৬০
+    country_id = "133" 
+    price = 0.60
+    
+    while True:
+        try:
+            # ব্যাকএন্ডে চেক করা যে কোনো নাম্বার স্টকে রেডি আছে কিনা
+            check_url = f"https://api.grizzlysms.com/stubs/handler_api.php?api_key={GRIZZLY_API_KEY}&action=getPrices&service=tg&country={country_id}"
+            res = requests.get(check_url).json()
+            
+            # যদি স্টকে ১টির বেশি নাম্বার এভেইলবল থাকে
+            if res and country_id in res.get('tg', {}):
+                count = res['tg'][country_id].get('count', 0)
+                if count > 0:
+                    order_id = str(int(time.time()))
+                    markup = types.InlineKeyboardMarkup()
+                    markup.row(types.InlineKeyboardButton("🛒 Claim Telegram Number", callback_data=f"claim_{order_id}_{country_id}_{price}"))
+                    
+                    bot.send_message(GROUP_ID, f"⚡ **AUTOMATIC TELEGRAM DROP!** ⚡\n\n🎯 সার্ভিস: `TELEGRAM (tg)`\n🇬🇧 দেশ কোড: `{country_id}`\n💵 মূল্য: ${price} USDT\n\n🔥 গ্রিজলী প্যানেলে স্টক চলে এসেছে! দ্রুত নিচের বাটনে চাপ দিয়ে স্নাইপ করুন। একজন নিলেই শেষ!", reply_markup=markup)
+                    time.sleep(120) # একবার ড্রপ হলে ২ মিনিট লুপ পজ থাকবে যেন স্প্যাম না হয়
+        except Exception:
+            pass
+        time.sleep(15) # প্রতি ১৫ সেকেন্ড পর পর ব্যাকগ্রাউন্ডে চেক করবে
+
+# ==========================================
+#  ৯. ইঞ্জিন বুটআপ
+# ==========================================
+if __name__ == '__main__':
+    keep_alive()
+    # অটোমেটিক ব্যাকগ্রাউন্ড লুপ চালু করা হলো
+    Thread(target=auto_grizzly_fetcher, daemon=True).start()
+    print("🚀 Khan Professional Telegram-Only Sniper Bot is fully armed!")
+    bot.infinity_polling(timeout=15)
