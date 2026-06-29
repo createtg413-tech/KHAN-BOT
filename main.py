@@ -4,6 +4,7 @@ import random
 import time
 from telebot import types
 import telebot
+from flask import Flask
 from threading import Thread
 
 # ==========================================
@@ -30,7 +31,24 @@ def save_db(db):
     MEMORY_DB = db
 
 # ==========================================
-#  ২. মেম্বারশিপ চেক (স্মার্ট জয়েনিং লজিক)
+#  ২. রেন্ডারের পোর্ট স্ক্যানার শান্ত করার ফ্ল্যাস্ক ওয়েব পিন (Flask)
+# ==========================================
+app = Flask('')
+
+@app.route('/')
+def home(): 
+    return "🔥 Khan Premium Telegram Sniper Engine is Live! 🔥"
+
+def run_server():
+    # রেন্ডার যে পোর্টই খুঁজুক না কেন, এই কোড অটো সেই পোর্ট ওপেন করে দিবে
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port)
+
+def keep_alive(): 
+    Thread(target=run_server, daemon=True).start()
+
+# ==========================================
+#  ৩. মেম্বারシップ চেক (স্মার্ট জয়েনিং লজিক)
 # ==========================================
 def is_joined_all(user_id):
     if user_id == ADMIN_ID: return True
@@ -44,7 +62,7 @@ def is_joined_all(user_id):
     except Exception: return False
 
 # ==========================================
-#  ৩. মেইন ড্যাশবোর্ড ইন্টারফেস (Premium Look)
+#  ৪. মেইন ড্যাশবোর্ড ইন্টারফেস (Premium Look)
 # ==========================================
 def send_dashboard(chat_id, user_id):
     db = load_db()
@@ -67,7 +85,7 @@ def send_dashboard(chat_id, user_id):
     bot.send_message(chat_id, text, reply_markup=markup, parse_mode="Markdown")
 
 # ==========================================
-#  ৪. কমান্ড হ্যান্ডলিং (/start)
+#  ৫. কমান্ড হ্যান্ডলিং (/start)
 # ==========================================
 @bot.message_handler(commands=['start'])
 def handle_start(message):
@@ -103,7 +121,7 @@ def handle_start(message):
         send_dashboard(chat_id, user_id)
 
 # ==========================================
-#  ৫. Admin প্যানেল কমান্ডস
+#  ৬. Admin প্যানেল কমান্ডস
 # ==========================================
 @bot.message_handler(commands=['admin'])
 def admin_cmd(message):
@@ -130,7 +148,7 @@ def add_balance_cmd(message):
         bot.send_message(message.chat.id, "❌ ফরম্যাট ভুল! উদাহরণ: `/addbalance 123456 5.0`")
 
 # ==========================================
-#  ৬. বাটন ও অ্যাকশন কন্ট্রোলার (Callbacks)
+#  ৭. বাটন ও অ্যাকশন কন্ট্রোলার (Callbacks)
 # ==========================================
 @bot.callback_query_handler(func=lambda call: True)
 def handle_all_callbacks(call):
@@ -285,7 +303,7 @@ def process_support_msg(message):
     except Exception: pass
 
 # ==========================================
-#  ৭. 🔁 অটোমেটিক স্টক চেকার (Auto-Fetch Stream)
+#  ৮. 🔁 অটোমেটিক স্টক চেকার (Auto-Fetch Stream)
 # ==========================================
 def auto_grizzly_fetcher():
     country_id = "133" 
@@ -306,19 +324,24 @@ def auto_grizzly_fetcher():
                             markup = types.InlineKeyboardMarkup()
                             markup.row(types.InlineKeyboardButton("🛒 Claim Telegram Number", callback_data=f"claim_{order_id}_{country_id}_{price}"))
                             
-                            bot.send_message(GROUP_ID, f"⚡ **AUTOMATIC TELEGRAM DROP!** ⚡\n\n🎯 সার্ভিস: `TELEGRAM (tg)`\n💵 মূল্য: ${price} USDT\n\n🔥 স্টক এসেছে! দ্রুত স্নাইপ করুন।", reply_markup=markup)
+                            bot.send_message(GROUP_ID, f"⚡ **AUTOMATIC TELEGRAM DROP!** ⚡\n\n🎯 서비스: `TELEGRAM (tg)`\n💵 মূল্য: ${price} USDT\n\n🔥 স্টক এসেছে! দ্রুত স্নাইপ করুন।", reply_markup=markup)
                             time.sleep(120)
                 except Exception: pass
         except Exception: pass
         time.sleep(15)
 
 # ==========================================
-#  ৮. ইঞ্জিন বুটআপ (Pure Background Worker)
+#  ৯. ইঞ্জিন বুটআপ (With Port Binding)
 # ==========================================
 if __name__ == '__main__':
-    Thread(target=auto_grizzly_fetcher, daemon=True).start()
-    print("🚀 Khan Sniper Bot is now running continuously without web server hooks.")
+    # রেন্ডারের মন শান্ত করার জন্য ব্যাকগ্রাউন্ডে ফ্ল্যাস্ক পোর্ট রান হবে
+    keep_alive()
     
+    # ব্যাকগ্রাউন্ড টাস্ক রান
+    Thread(target=auto_grizzly_fetcher, daemon=True).start()
+    print("🚀 Khan Sniper Bot web server and polling are armed perfectly!")
+    
+    # মেইন টেলিগ্রাম পোলিং লুপ
     while True:
         try:
             bot.polling(none_stop=True, interval=0, timeout=20)
