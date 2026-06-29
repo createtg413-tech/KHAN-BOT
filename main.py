@@ -2,7 +2,6 @@ import os
 import requests
 import random
 import time
-import json
 from telebot import types
 import telebot
 from flask import Flask
@@ -20,29 +19,16 @@ GROUP_ID = "@urkhanvai2"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# ফাইল-ভিত্তিক পার্মানেন্ট ডাটাবেস (ফাইল না থাকলে অটো তৈরি হবে)
-DB_FILE = "database.json"
+# রেন্ডার ফ্রেন্ডলি ইন-মেমোরি ডাটাবেস (ফাইল সিস্টেম ক্র্যাশ করবে না)
+MEMORY_DB = {}
 GLOBAL_ORDERS = {}
 
 def load_db():
-    if os.path.exists(DB_FILE):
-        try:
-            with open(DB_FILE, "r") as f: 
-                return json.load(f)
-        except Exception:
-            return {}
-    else:
-        # ফাইল না থাকলে খালি ডিকশনারি দিয়ে নতুন ফাইল তৈরি করবে যেন ক্র্যাশ না করে
-        with open(DB_FILE, "w") as f:
-            json.dump({}, f)
-        return {}
+    return MEMORY_DB
 
 def save_db(db):
-    try:
-        with open(DB_FILE, "w") as f: 
-            json.dump(db, f, indent=4)
-    except Exception:
-        pass
+    global MEMORY_DB
+    MEMORY_DB = db
 
 # ==========================================
 #  ২. ২৪ ঘণ্টা লাইভ রাখার ওয়েব পিন (Flask - Render Fixed)
@@ -134,14 +120,14 @@ def handle_start(message):
         send_dashboard(chat_id, user_id)
 
 # ==========================================
-#  ⑥. এডমিন স্পেশাল কন্ট্রোল কমান্ডস
+#  ৬. Admin প্যানেল কমান্ডস
 # ==========================================
 @bot.message_handler(commands=['admin'])
 def admin_cmd(message):
     if message.from_user.id != ADMIN_ID: return
     db = load_db()
     total_users = len(db)
-    text = f"👑 **خان ভাই স্পেশাল এডমিন প্যানেল** 👑\n\n👥 মোট রেজিস্টার্ড ইউজার: {total_users}\n⚡ সক্রিয় ওটিপি সেশন: {len(GLOBAL_ORDERS)}\n\n⚙️ **কমান্ড গাইড:**\n👉 ইউজার ব্যালেন্স দিতে লিখুন:\n`/addbalance ইউজার_আইডি পরিমাণ`"
+    text = f"👑 **খান ভাই স্পেশাল Admin প্যানেল** 👑\n\n👥 মোট রেজিস্টার্ড ইউজার: {total_users}\n⚡ সক্রিয় ওটিপি সেশন: {len(GLOBAL_ORDERS)}\n\n⚙️ **কমান্ড গাইড:**\n👉 ইউজার ব্যালেন্স দিতে লিখুন:\n`/addbalance ইউজার_আইডি পরিমাণ`"
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
 @bot.message_handler(commands=['addbalance'])
@@ -158,7 +144,7 @@ def add_balance_cmd(message):
         else:
             bot.send_message(message.chat.id, "❌ এই আইডির কোনো ইউজার বটে নাই!")
     except Exception:
-        bot.send_message(message.chat.id, "❌ ফরম্যাট ভুল! ঠিকভাবে লিখুন। উদাহরণ: `/addbalance 123456 5.0`")
+        bot.send_message(message.chat.id, "❌ ফরম্যাট ভুল! উদাহরণ: `/addbalance 123456 5.0`")
 
 # ==========================================
 #  ৭. বাটন ও অ্যাকশন কন্ট্রোলার (Callbacks)
@@ -197,20 +183,19 @@ def handle_all_callbacks(call):
     elif call.data == "spin_wheel":
         current_time = time.time()
         if current_time - db.get(s_user_id, {}).get('last_spin', 0) < 86400:
-            bot.answer_callback_query(call.id, "❌ আজকে অলরেডি স্পিন করেছেন! ২৪ ঘণ্টা পর আবার ট্রাই করুন।", show_alert=True)
+            bot.answer_callback_query(call.id, "❌ আজকে অলরেডি স্পিন করেছেন!", show_alert=True)
             return
         win_amount = round(random.uniform(0.002, 0.05), 4)
         db[s_user_id]['balance'] = db.get(s_user_id, {}).get('balance', 0.05) + win_amount
         db[s_user_id]['last_spin'] = current_time
         save_db(db)
-        bot.answer_callback_query(call.id, f"🎉 মোবারকবাদ! আপনি ${win_amount} ফ্রি বোনাস জিতেছেন!", show_alert=True)
+        bot.answer_callback_query(call.id, f"🎉 আপনি ${win_amount} ফ্রি বোনাস জিতেছেন!", show_alert=True)
         try:
             bot.delete_message(chat_id, call.message.message_id)
         except Exception: pass
         send_dashboard(chat_id, user_id)
 
     elif call.data == "ref_menu":
-        # গেট_মি সরাসরি এখানে কল না করে স্ট্যাটিক টেক্সট বা ডাইনামিক হ্যান্ডল করা নিরাপদ
         ref_link = f"https://t.me/KhanSniperBot_YourLink?start={user_id}"
         try:
             bot.edit_message_text(f"👥 **রেফারেল প্রোগ্রাম (২%)**\n\n🔗 **আপনার রেফার লিংক:**\n`{ref_link}`", chat_id, call.message.message_id, parse_mode="Markdown")
@@ -226,13 +211,13 @@ def handle_all_callbacks(call):
 
     elif call.data.startswith("p_"):
         method = call.data.split("_")[1]
-        details = {'bkash': '`01948805285` (Personal)', 'nagad': '`01948805285` (Personal)', 'usdt': '`TKpCgqq4iEZmbZnF9B4iz6GLNnN9n8eVoV` (TRC20)', 'binance': '`849519589` (Binance User ID)'}[method]
+        details = {'bkash': '`01948805285`', 'nagad': '`01948805285`', 'usdt': '`TKpCgqq4iEZmbZnF9B4iz6GLNnN9n8eVoV`', 'binance': '`849519589`'}[method]
         try:
-            bot.edit_message_text(f"📥 ক্যাশইন/ডিপোজিট করুন:\n\n💰 **ঠিকানা:** {details}\n\nটাকা পাঠিয়ে স্ক্রিনশট ও TxID বটের `Live Support`-এ পাঠান।", chat_id, call.message.message_id, parse_mode="Markdown")
+            bot.edit_message_text(f"📥 ডিপোজিট করুন:\n\n💰 **ঠিকানা:** {details}\n\nTxID বটের `Live Support`-এ পাঠান।", chat_id, call.message.message_id, parse_mode="Markdown")
         except Exception: pass
 
     elif call.data == "support_chat":
-        msg = bot.send_message(chat_id, "💬 আপনার মেসেজ বা স্ক্রিনশটটি এখানে পাঠান, সরাসরি এডমিনের কাছে চলে যাবে:")
+        msg = bot.send_message(chat_id, "💬 আপনার মেসেজ বা স্ক্রিনশটটি এখানে পাঠান:")
         bot.register_next_step_handler(msg, process_support_msg)
 
     elif call.data.startswith("claim_"):
@@ -240,11 +225,11 @@ def handle_all_callbacks(call):
         price = float(price_str)
         
         if db.get(s_user_id, {}).get('balance', 0.0) < price:
-            bot.answer_callback_query(call.id, "❌ এই নম্বরটি নেওয়ার মতো পর্যাপ্ত ব্যালেন্স নেই!", show_alert=True)
+            bot.answer_callback_query(call.id, "❌ পর্যাপ্ত ব্যালেন্স নেই!", show_alert=True)
             return
         
         if order_id in GLOBAL_ORDERS:
-            bot.answer_callback_query(call.id, "❌ দুঃখিত ভাই! এটি অলরেডি অন্য একজন স্নাইপ করে নিয়েছেন।", show_alert=True)
+            bot.answer_callback_query(call.id, "❌ অলরেডি অন্য একজন স্নাইপ করে নিয়েছেন।", show_alert=True)
             return
             
         API_URL = f"https://api.grizzlysms.com/stubs/handler_api.php?api_key={GRIZZLY_API_KEY}&action=getNumber&service=tg&country={country_id}"
@@ -256,13 +241,13 @@ def handle_all_callbacks(call):
                 GLOBAL_ORDERS[order_id] = {'user': user_id, 'api_id': api_order_id, 'price': price}
                 
                 try:
-                    bot.edit_message_text(f"🔒 **Telegram Number Snipped!**\n👤 Snipped by: `{user_id}`\n🚫 Stock Closed.", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+                    bot.edit_message_text(f"🔒 **Number Snipped!**\n👤 Snipped by: `{user_id}`", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
                 except Exception: pass
                 
                 markup = types.InlineKeyboardMarkup()
                 markup.row(types.InlineKeyboardButton("🔄 Fetch OTP Code", callback_data=f"fotp_{order_id}"))
                 markup.row(types.InlineKeyboardButton("❌ Cancel & Refund", callback_data=f"cncl_{order_id}"))
-                bot.send_message(user_id, f"🎯 **স্নাইপ সফল!**\n\n📱 নম্বর: `{phone_number}`\n💵 মূল্য: ${price:.2f} USDT\n\n⚠️ ওটিপি পাঠিয়ে নিচের বাটনে চাপুন:", reply_markup=markup, parse_mode="Markdown")
+                bot.send_message(user_id, f"🎯 **স্নাইপ সফল!**\n\n📱 নম্বর: `{phone_number}`\n💵 মূল্য: ${price:.2f} USDT", reply_markup=markup, parse_mode="Markdown")
             else:
                 bot.answer_callback_query(call.id, "❌ এপিআই স্টক খালি!", show_alert=True)
         except Exception:
@@ -288,13 +273,13 @@ def handle_all_callbacks(call):
                     db[referrer]['balance'] = db.get(referrer, {}).get('balance', 0.0) + (price * 0.02)
                 save_db(db)
                     
-                bot.send_message(chat_id, f"✅ **ওটিপি কোড:** `{code}`\n💸 এক않ন্ট থেকে ${price} করা হয়েছে।", parse_mode="Markdown")
+                bot.send_message(chat_id, f"✅ **ওটিপি কোড:** `{code}`", parse_mode="Markdown")
                 try:
                     bot.delete_message(chat_id, call.message.message_id)
                 except Exception: pass
                 if order_id in GLOBAL_ORDERS: del GLOBAL_ORDERS[order_id]
             elif res == "STATUS_WAIT_CODE":
-                bot.answer_callback_query(call.id, "⏳ ওটিপি আসেনি! একটু পর আবার চাপুন।", show_alert=True)
+                bot.answer_callback_query(call.id, "⏳ ওটিপি আসেনি! আবার চাপুন।", show_alert=True)
         except Exception: pass
 
     elif call.data.startswith("cncl_"):
@@ -304,7 +289,7 @@ def handle_all_callbacks(call):
             try:
                 requests.get(f"https://api.grizzlysms.com/stubs/handler_api.php?api_key={GRIZZLY_API_KEY}&action=setStatus&status=8&id={ord_info['api_id']}")
             except Exception: pass
-            bot.answer_callback_query(call.id, "❌ অর্ডার বাতিল! রিفান্ড করা হয়েছে।")
+            bot.answer_callback_query(call.id, "❌ অর্ডার বাতিল করা হয়েছে।")
             try:
                 bot.delete_message(chat_id, call.message.message_id)
             except Exception: pass
@@ -312,8 +297,8 @@ def handle_all_callbacks(call):
 
 def process_support_msg(message):
     try:
-        bot.send_message(ADMIN_ID, f"🔔 **সাপোর্ট মেসেজ!**\n👤 আইডি: `{message.from_user.id}`\n💬 মেসেজ: {message.text}")
-        bot.send_message(message.chat.id, "✅ আপনার বার্তা এডমিনের কাছে পাঠানো হয়েছে।")
+        bot.send_message(ADMIN_ID, f"🔔 **সাপোর্ট মেসেজ!**\n👤 আইডি: `{message.from_user.id}`\n💬 {message.text}")
+        bot.send_message(message.chat.id, "✅ এডমিনের কাছে পাঠানো হয়েছে।")
     except Exception: pass
 
 # ==========================================
@@ -328,7 +313,6 @@ def auto_grizzly_fetcher():
             check_url = f"https://api.grizzlysms.com/stubs/handler_api.php?api_key={GRIZZLY_API_KEY}&action=getPrices&service=tg&country={country_id}"
             response = requests.get(check_url)
             
-            # সেফটি চেক: যদি জেসন ডাটা ঠিকঠাক রেসপন্স করে
             if response.status_code == 200:
                 try:
                     res = response.json()
@@ -339,27 +323,23 @@ def auto_grizzly_fetcher():
                             markup = types.InlineKeyboardMarkup()
                             markup.row(types.InlineKeyboardButton("🛒 Claim Telegram Number", callback_data=f"claim_{order_id}_{country_id}_{price}"))
                             
-                            bot.send_message(GROUP_ID, f"⚡ **AUTOMATIC TELEGRAM DROP!** ⚡\n\n🎯 সার্ভিস: `TELEGRAM (tg)`\n🇬🇧 দেশ কোড: `{country_id}`\n💵 মূল্য: ${price} USDT\n\n🔥 গ্রিজলী প্যানেলে স্টক চলে এসেছে! দ্রুত নিচের বাটনে চাপ দিয়ে স্নাইপ করুন। একজন নিলেই শেষ!", reply_markup=markup)
+                            bot.send_message(GROUP_ID, f"⚡ **AUTOMATIC TELEGRAM DROP!** ⚡\n\n🎯 সার্ভিস: `TELEGRAM (tg)`\n💵 মূল্য: ${price} USDT\n\n🔥 স্টক এসেছে! দ্রুত স্নাইপ করুন।", reply_markup=markup)
                             time.sleep(120)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception: pass
+        except Exception: pass
         time.sleep(15)
 
 # ==========================================
 #  ৯. ইঞ্জিন বুটআপ
 # ==========================================
 if __name__ == '__main__':
-    # ডাটাবেস ইনিশিয়ালাইজেশন
-    load_db()
     keep_alive()
     Thread(target=auto_grizzly_fetcher, daemon=True).start()
-    print("🚀 Khan Professional Telegram-Only Sniper Bot is fully armed!")
+    print("🚀 Khan Professional Telegram Sniper Bot is fully armed!")
     
-    # ইনফিনিটি পোলিং ক্র্যাশ প্রুফ উপায়ে রান করানো
+    # রেন্ডার ফ্রেন্ডলি ক্র্যাশ-প্রুফ পোলিং লুপ
     while True:
         try:
-            bot.infinity_polling(timeout=15)
+            bot.polling(none_stop=True, interval=0, timeout=20)
         except Exception:
             time.sleep(5)
