@@ -4,7 +4,6 @@ import random
 import time
 from telebot import types
 import telebot
-from flask import Flask
 from threading import Thread
 
 # ==========================================
@@ -19,7 +18,7 @@ GROUP_ID = "@urkhanvai2"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# রেন্ডার ফ্রেন্ডলি ইন-মেমোরি ডাটাবেস (ফাইল সিস্টেম ক্র্যাশ করবে না)
+# রেন্ডার ফ্রেন্ডলি ইন-মেমোরি ডাটাবেস
 MEMORY_DB = {}
 GLOBAL_ORDERS = {}
 
@@ -31,23 +30,7 @@ def save_db(db):
     MEMORY_DB = db
 
 # ==========================================
-#  ২. ২৪ ঘণ্টা লাইভ রাখার ওয়েব পিন (Flask - Render Fixed)
-# ==========================================
-app = Flask('')
-
-@app.route('/')
-def home(): 
-    return "🔥 Khan Premium Telegram Sniper Engine is Live! 🔥"
-
-def run_server():
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
-
-def keep_alive(): 
-    Thread(target=run_server, daemon=True).start()
-
-# ==========================================
-#  ৩. মেম্বারশিপ চেক (স্মার্ট জয়েনিং লজিক)
+#  ২. মেম্বারশিপ চেক (স্মার্ট জয়েনিং লজিক)
 # ==========================================
 def is_joined_all(user_id):
     if user_id == ADMIN_ID: return True
@@ -61,7 +44,7 @@ def is_joined_all(user_id):
     except Exception: return False
 
 # ==========================================
-#  ৪. মেইন ড্যাশবোর্ড ইন্টারফেস (Premium Look)
+#  ৩. মেইন ড্যাশবোর্ড ইন্টারফেস (Premium Look)
 # ==========================================
 def send_dashboard(chat_id, user_id):
     db = load_db()
@@ -84,7 +67,7 @@ def send_dashboard(chat_id, user_id):
     bot.send_message(chat_id, text, reply_markup=markup, parse_mode="Markdown")
 
 # ==========================================
-#  ৫. কমান্ড হ্যান্ডলিং (/start)
+#  ৪. কমান্ড হ্যান্ডলিং (/start)
 # ==========================================
 @bot.message_handler(commands=['start'])
 def handle_start(message):
@@ -120,14 +103,14 @@ def handle_start(message):
         send_dashboard(chat_id, user_id)
 
 # ==========================================
-#  ৬. Admin প্যানেল কমান্ডস
+#  ৫. Admin প্যানেল কমান্ডস
 # ==========================================
 @bot.message_handler(commands=['admin'])
 def admin_cmd(message):
     if message.from_user.id != ADMIN_ID: return
     db = load_db()
     total_users = len(db)
-    text = f"👑 **খান ভাই স্পেশাল Admin প্যানেল** 👑\n\n👥 মোট রেজিস্টার্ড ইউজার: {total_users}\n⚡ সক্রিয় ওটিপি সেশন: {len(GLOBAL_ORDERS)}\n\n⚙️ **কমান্ড গাইড:**\n👉 ইউজার ব্যালেন্স দিতে লিখুন:\n`/addbalance ইউজার_আইডি পরিমাণ`"
+    text = f"👑 **خان ভাই স্পেশাল Admin প্যানেল** 👑\n\n👥 মোট রেজিস্টার্ড ইউজার: {total_users}\n⚡ সক্রিয় ওটিপি সেশন: {len(GLOBAL_ORDERS)}\n\n⚙️ **কমান্ড গাইড:**\n👉 ইউজার ব্যালেন্স দিতে লিখুন:\n`/addbalance ইউজার_আইডি পরিমাণ`"
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
 @bot.message_handler(commands=['addbalance'])
@@ -147,7 +130,7 @@ def add_balance_cmd(message):
         bot.send_message(message.chat.id, "❌ ফরম্যাট ভুল! উদাহরণ: `/addbalance 123456 5.0`")
 
 # ==========================================
-#  ৭. বাটন ও অ্যাকশন কন্ট্রোলার (Callbacks)
+#  ৬. বাটন ও অ্যাকশন কন্ট্রোলার (Callbacks)
 # ==========================================
 @bot.callback_query_handler(func=lambda call: True)
 def handle_all_callbacks(call):
@@ -302,7 +285,7 @@ def process_support_msg(message):
     except Exception: pass
 
 # ==========================================
-#  ৮. 🔁 অটোমেটিক স্টক চেকার (Auto-Fetch Stream)
+#  ৭. 🔁 অটোমেটিক স্টক চেকার (Auto-Fetch Stream)
 # ==========================================
 def auto_grizzly_fetcher():
     country_id = "133" 
@@ -330,14 +313,12 @@ def auto_grizzly_fetcher():
         time.sleep(15)
 
 # ==========================================
-#  ৯. ইঞ্জিন বুটআপ
+#  ৮. ইঞ্জিন বুটআপ (Pure Background Worker)
 # ==========================================
 if __name__ == '__main__':
-    keep_alive()
     Thread(target=auto_grizzly_fetcher, daemon=True).start()
-    print("🚀 Khan Professional Telegram Sniper Bot is fully armed!")
+    print("🚀 Khan Sniper Bot is now running continuously without web server hooks.")
     
-    # রেন্ডার ফ্রেন্ডলি ক্র্যাশ-প্রুফ পোলিং লুপ
     while True:
         try:
             bot.polling(none_stop=True, interval=0, timeout=20)
